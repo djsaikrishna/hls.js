@@ -76,8 +76,6 @@ const sampleEntryCodesISO = {
   },
 };
 
-const MediaSource = getMediaSource();
-
 export type CodecType = 'audio' | 'video';
 
 export function isCodecType(codec: string, type: CodecType): boolean {
@@ -87,14 +85,23 @@ export function isCodecType(codec: string, type: CodecType): boolean {
 
 export function areCodecsMediaSourceSupported(
   codecs: string,
-  type: CodecType
+  type: CodecType,
+  preferManagedMediaSource = true
 ): boolean {
   return !codecs
     .split(',')
-    .some((codec) => !isCodecMediaSourceSupported(codec, type));
+    .some(
+      (codec) =>
+        !isCodecMediaSourceSupported(codec, type, preferManagedMediaSource)
+    );
 }
 
-function isCodecMediaSourceSupported(codec: string, type: CodecType): boolean {
+function isCodecMediaSourceSupported(
+  codec: string,
+  type: CodecType,
+  preferManagedMediaSource = true
+): boolean {
+  const MediaSource = getMediaSource(preferManagedMediaSource);
   return (
     MediaSource?.isTypeSupported(`${type || 'video'}/mp4;codecs="${codec}"`) ??
     false
@@ -111,7 +118,8 @@ const CODEC_COMPATIBLE_NAMES: CodecNameCache = {};
 type LowerCaseCodecType = 'flac' | 'opus';
 
 function getCodecCompatibleNameLower(
-  lowerCaseCodec: LowerCaseCodecType
+  lowerCaseCodec: LowerCaseCodecType,
+  preferManagedMediaSource = true
 ): string {
   if (CODEC_COMPATIBLE_NAMES[lowerCaseCodec]) {
     return CODEC_COMPATIBLE_NAMES[lowerCaseCodec]!;
@@ -126,7 +134,13 @@ function getCodecCompatibleNameLower(
   }[lowerCaseCodec];
 
   for (let i = 0; i < codecsToCheck.length; i++) {
-    if (isCodecMediaSourceSupported(codecsToCheck[i], 'audio')) {
+    if (
+      isCodecMediaSourceSupported(
+        codecsToCheck[i],
+        'audio',
+        preferManagedMediaSource
+      )
+    ) {
       CODEC_COMPATIBLE_NAMES[lowerCaseCodec] = codecsToCheck[i];
       return codecsToCheck[i];
     }
@@ -136,8 +150,14 @@ function getCodecCompatibleNameLower(
 }
 
 const AUDIO_CODEC_REGEXP = /flac|opus/i;
-export function getCodecCompatibleName(codec: string): string {
+export function getCodecCompatibleName(
+  codec: string,
+  preferManagedMediaSource = true
+): string {
   return codec.replace(AUDIO_CODEC_REGEXP, (m) =>
-    getCodecCompatibleNameLower(m.toLowerCase() as LowerCaseCodecType)
+    getCodecCompatibleNameLower(
+      m.toLowerCase() as LowerCaseCodecType,
+      preferManagedMediaSource
+    )
   );
 }
