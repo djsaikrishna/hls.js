@@ -173,6 +173,7 @@ export default class BufferController implements ComponentAPI {
     );
     if (media && MediaSource) {
       const ms = (this.mediaSource = new MediaSource());
+      this.log(`created media source: ${ms.constructor?.name}`);
       // MediaSource listeners are arrow functions with a lexical scope, and do not need to be bound
       ms.addEventListener('sourceopen', this._onMediaSourceOpen);
       ms.addEventListener('sourceended', this._onMediaSourceEnded);
@@ -180,13 +181,18 @@ export default class BufferController implements ComponentAPI {
       ms.addEventListener('startstreaming', this._onStartStreaming);
       ms.addEventListener('endstreaming', this._onEndStreaming);
 
-      // Disable AirPlay for ManagedMediaSource to work
-      media.disableRemotePlayback = true;
-
-      // link video and media Source
-      media.src = self.URL.createObjectURL(ms);
       // cache the locally generated object url
-      this._objectUrl = media.src;
+      const objectUrl = (this._objectUrl = self.URL.createObjectURL(ms));
+      // link video and media Source
+      try {
+        media.removeAttribute('src');
+        removeChildren(media);
+        media.disableRemotePlayback = true;
+        addSource(media, objectUrl);
+        media.load();
+      } catch (error) {
+        media.src = objectUrl;
+      }
       media.addEventListener('emptied', this._onMediaEmptied);
     }
   }
@@ -254,11 +260,14 @@ export default class BufferController implements ComponentAPI {
 
         // clean up video tag src only if it's our own url. some external libraries might
         // hijack the video tag and change its 'src' without destroying the Hls instance first
-        if (media.src === _objectUrl) {
+        if (this.mediaSrc === _objectUrl) {
           media.removeAttribute('src');
+          removeChildren(media);
           media.load();
         } else {
-          this.warn('media.src was changed by a third party - skip cleanup');
+          this.warn(
+            'media|source.src was changed by a third party - skip cleanup'
+          );
         }
       }
 
@@ -874,13 +883,19 @@ export default class BufferController implements ComponentAPI {
   };
 
   private _onMediaEmptied = () => {
-    const { media, _objectUrl } = this;
-    if (media && media.src !== _objectUrl) {
-      this.error(
-        `Media element src was set while attaching MediaSource (${_objectUrl} > ${media.src})`
+    const { mediaSrc, _objectUrl } = this;
+    if (mediaSrc !== _objectUrl) {
+      logger.error(
+        `Media element src was set while attaching MediaSource (${_objectUrl} > ${mediaSrc})`
       );
     }
   };
+
+  private get mediaSrc(): string | undefined {
+    const media =
+      (this.media?.firstChild as HTMLSourceElement | null) || this.media;
+    return media?.src;
+  }
 
   private _onSBUpdateStart(type: SourceBufferName) {
     const { operationQueue } = this;
@@ -1025,4 +1040,17 @@ export default class BufferController implements ComponentAPI {
       buffer.removeEventListener(l.event, l.listener);
     });
   }
+}
+
+function removeChildren(node: HTMLElement) {
+  while (node.firstChild) {
+    node.removeChild(node.firstChild);
+  }
+}
+
+function addSource(media: HTMLMediaElement, url: string) {
+  const source = self.document.createElement('source');
+  source.type = 'video/mp4';
+  source.src = url;
+  media.appendChild(source);
 }
