@@ -168,9 +168,8 @@ export default class BufferController implements ComponentAPI {
     data: MediaAttachingData
   ) {
     const media = (this.media = data.media);
-    const MediaSource = getMediaSource(
-      this.hls.config.preferManagedMediaSource
-    );
+    const { preferManagedMediaSource } = this.hls.config;
+    const MediaSource = getMediaSource(preferManagedMediaSource);
     if (media && MediaSource) {
       const ms = (this.mediaSource = new MediaSource());
       this.log(`created media source: ${ms.constructor?.name}`);
@@ -184,13 +183,20 @@ export default class BufferController implements ComponentAPI {
       // cache the locally generated object url
       const objectUrl = (this._objectUrl = self.URL.createObjectURL(ms));
       // link video and media Source
-      try {
-        media.removeAttribute('src');
-        removeChildren(media);
-        media.disableRemotePlayback = true;
-        addSource(media, objectUrl);
-        media.load();
-      } catch (error) {
+      if (preferManagedMediaSource) {
+        try {
+          media.removeAttribute('src');
+          removeChildren(media);
+          // ManagedMediaSource will not open without disableRemotePlayback set to false or source alternatives
+          media.disableRemotePlayback =
+            media.disableRemotePlayback ||
+            ms instanceof (self as any).ManagedMediaSource;
+          addSource(media, objectUrl);
+          media.load();
+        } catch (error) {
+          media.src = objectUrl;
+        }
+      } else {
         media.src = objectUrl;
       }
       media.addEventListener('emptied', this._onMediaEmptied);
