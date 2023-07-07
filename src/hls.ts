@@ -12,7 +12,7 @@ import { enableStreamingMode, hlsDefaultConfig, mergeConfig } from './config';
 import { EventEmitter } from 'eventemitter3';
 import { Events } from './events';
 import { ErrorTypes, ErrorDetails } from './errors';
-import { HdcpLevels } from './types/level';
+import { isHdcpLevel, type HdcpLevel, type Level } from './types/level';
 import type { HlsEventEmitter, HlsListeners } from './events';
 import type AudioTrackController from './controller/audio-track-controller';
 import type AbrController from './controller/abr-controller';
@@ -24,7 +24,6 @@ import type SubtitleTrackController from './controller/subtitle-track-controller
 import type { ComponentAPI, NetworkComponentAPI } from './types/component-api';
 import type { MediaPlaylist } from './types/media-playlist';
 import type { HlsConfig } from './config';
-import type { HdcpLevel, Level } from './types/level';
 import type { BufferInfo } from './utils/buffer-helper';
 import type AudioStreamController from './controller/audio-stream-controller';
 import type BasePlaylistController from './controller/base-playlist-controller';
@@ -611,6 +610,10 @@ export default class Hls implements HlsEventEmitter {
     return bwEstimator.getEstimate();
   }
 
+  set bandwidthEstimate(abrEwmaDefaultEstimate: number) {
+    this.abrController.resetEstimator(abrEwmaDefaultEstimate);
+  }
+
   /**
    * get time to first byte estimate
    * @type {number}
@@ -638,7 +641,7 @@ export default class Hls implements HlsEventEmitter {
   }
 
   set maxHdcpLevel(value: HdcpLevel) {
-    if (HdcpLevels.indexOf(value) > -1) {
+    if (isHdcpLevel(value)) {
       this._maxHdcpLevel = value;
     }
   }
@@ -700,6 +703,14 @@ export default class Hls implements HlsEventEmitter {
     }
 
     return maxAutoLevel;
+  }
+
+  get firstAutoLevel(): number {
+    // ensure first auto level is between  min and max auto level
+    return Math.min(
+      Math.max(this.abrController.firstAutoLevel, this.minAutoLevel),
+      this.maxAutoLevel
+    );
   }
 
   /**
@@ -884,7 +895,6 @@ export type {
   HlsEventEmitter,
   HlsConfig,
   BufferInfo,
-  HdcpLevels,
   HdcpLevel,
   AbrController,
   AudioStreamController,

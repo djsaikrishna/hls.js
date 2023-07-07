@@ -22,11 +22,13 @@ export interface AbrComponentAPI extends ComponentAPI {
 export class AbrController implements AbrComponentAPI {
     constructor(hls: Hls);
     // (undocumented)
-    readonly bwEstimator: EwmaBandWidthEstimator;
+    bwEstimator: EwmaBandWidthEstimator;
     // (undocumented)
     clearTimer(): void;
     // (undocumented)
     destroy(): void;
+    // (undocumented)
+    get firstAutoLevel(): number;
     // (undocumented)
     protected hls: Hls;
     // (undocumented)
@@ -44,6 +46,8 @@ export class AbrController implements AbrComponentAPI {
     protected onLevelSwitching(event: Events.LEVEL_SWITCHING, data: LevelSwitchingData): void;
     // (undocumented)
     protected registerListeners(): void;
+    // (undocumented)
+    resetEstimator(abrEwmaDefaultEstimate?: number): void;
     // (undocumented)
     protected unregisterListeners(): void;
 }
@@ -1523,6 +1527,7 @@ class Hls implements HlsEventEmitter {
     set autoLevelCapping(newLevel: number);
     get autoLevelEnabled(): boolean;
     get bandwidthEstimate(): number;
+    set bandwidthEstimate(abrEwmaDefaultEstimate: number);
     get capLevelToPlayerSize(): boolean;
     // Warning: (ae-setter-with-docs) The doc comment for the property "capLevelToPlayerSize" must appear on the getter, not the setter.
     set capLevelToPlayerSize(shouldStartCapping: boolean);
@@ -1546,6 +1551,8 @@ class Hls implements HlsEventEmitter {
     static get ErrorTypes(): typeof ErrorTypes;
     // (undocumented)
     static get Events(): typeof Events;
+    // (undocumented)
+    get firstAutoLevel(): number;
     get firstLevel(): number;
     // Warning: (ae-setter-with-docs) The doc comment for the property "firstLevel" must appear on the getter, not the setter.
     set firstLevel(newLevel: number);
@@ -1982,6 +1989,8 @@ export class Level {
     // (undocumented)
     audioGroupIds?: (string | undefined)[];
     // (undocumented)
+    get averageBitrate(): number;
+    // (undocumented)
     readonly bitrate: number;
     // (undocumented)
     readonly codecSet: string;
@@ -1989,6 +1998,8 @@ export class Level {
     details?: LevelDetails;
     // (undocumented)
     fragmentError: number;
+    // (undocumented)
+    readonly frameRate: number;
     // (undocumented)
     readonly height: number;
     // (undocumented)

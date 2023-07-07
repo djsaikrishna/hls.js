@@ -1622,6 +1622,8 @@ Default value is set via [`capLevelToPlayerSize`](#capleveltoplayersize) in conf
 
 get: Returns the current bandwidth estimate in bits/s, if available. Otherwise, `NaN` is returned.
 
+set: Reset `EwmaBandWidthEstimator` using the value set as the new default estimate. This will update the value of `config.abrEwmaDefaultEstimate`.
+
 ### `hls.removeLevel(levelIndex, urlId)`
 
 Remove a loaded level from the list of levels, or a url from a level's list of redundant urls.

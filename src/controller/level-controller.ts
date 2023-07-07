@@ -13,15 +13,17 @@ import {
   LevelsUpdatedData,
   ManifestLoadingData,
 } from '../types/events';
-import { Level } from '../types/level';
+import { Level, addGroupId, isVideoRange } from '../types/level';
 import { Events } from '../events';
 import { ErrorTypes, ErrorDetails } from '../errors';
 import {
-  getCodecCompatibleName,
   areCodecsMediaSourceSupported,
+  codecsSetSelectionPreferenceValue,
+  getCodecCompatibleName,
 } from '../utils/codecs';
 import BasePlaylistController from './base-playlist-controller';
 import { PlaylistContextType, PlaylistLevelType } from '../types/loader';
+import { hlsDefaultConfig } from '../config';
 import type Hls from '../hls';
 import type { HlsUrlParameters, LevelParsed } from '../types/level';
 import type { MediaPlaylist } from '../types/media-playlist';
@@ -184,10 +186,11 @@ export default class LevelController extends BasePlaylistController {
       }
     );
 
-    // remove audio-only level if we also have levels with video codecs or RESOLUTION signalled
+    // remove audio-only and invalid video-range levels if we also have levels with video codecs or RESOLUTION signalled
     if ((resolutionFound || videoCodecFound) && audioCodecFound) {
       levels = levels.filter(
-        ({ videoCodec, width, height }) => !!videoCodec || !!(width && height)
+        ({ videoCodec, videoRange, width, height }) =>
+          !!videoCodec || !!(width && height) || !isVideoRange(videoRange)
       );
     }
 
@@ -197,7 +200,9 @@ export default class LevelController extends BasePlaylistController {
         if (this.hls) {
           if (unfilteredLevels.length) {
             this.warn(
-              `One or more CODECS in variant not supported: "${unfilteredLevels[0].attrs.CODECS}"`
+              `One or more CODECS in variant not supported: ${JSON.stringify(
+                unfilteredLevels[0].attrs
+              )}`
             );
           }
           const error = new Error(
@@ -239,23 +244,28 @@ export default class LevelController extends BasePlaylistController {
           ? 1
           : -1;
       }
+      // sort on height before bitrate for cap-level-controller
+      if (resolutionFound && a.height !== b.height) {
+        return a.height - b.height;
+      }
+      if (a.frameRate !== b.frameRate) {
+        return a.frameRate - b.frameRate;
+      }
+      if (a.codecSet !== b.codecSet) {
+        const valueA = codecsSetSelectionPreferenceValue(a.codecSet);
+        const valueB = codecsSetSelectionPreferenceValue(b.codecSet);
+        if (valueA !== valueB) {
+          return valueB - valueA;
+        }
+      }
       if (a.bitrate !== b.bitrate) {
         return a.bitrate - b.bitrate;
-      }
-      if (a.attrs['FRAME-RATE'] !== b.attrs['FRAME-RATE']) {
-        return (
-          a.attrs.decimalFloatingPoint('FRAME-RATE') -
-          b.attrs.decimalFloatingPoint('FRAME-RATE')
-        );
       }
       if (a.attrs.SCORE !== b.attrs.SCORE) {
         return (
           a.attrs.decimalFloatingPoint('SCORE') -
           b.attrs.decimalFloatingPoint('SCORE')
         );
-      }
-      if (resolutionFound && a.height !== b.height) {
-        return a.height - b.height;
       }
       return 0;
     });
@@ -279,9 +289,21 @@ export default class LevelController extends BasePlaylistController {
     for (let i = 0; i < levels.length; i++) {
       if (levels[i] === firstLevelInPlaylist) {
         this._firstLevel = i;
+        const firstLevelBitrate = firstLevelInPlaylist.bitrate;
+        const bandwidthEstimate = this.hls.bandwidthEstimate;
         this.log(
-          `manifest loaded, ${levels.length} level(s) found, first bitrate: ${firstLevelInPlaylist.bitrate}`
+          `manifest loaded, ${levels.length} level(s) found, first bitrate: ${firstLevelBitrate}`
         );
+        // Update default bwe to first variant bitrate as long it has not been configured or set
+        if (this.hls.userConfig?.abrEwmaDefaultEstimate === undefined) {
+          const startingBwEstimate = Math.min(firstLevelBitrate, 5e6); // 5mbps
+          if (
+            startingBwEstimate > bandwidthEstimate &&
+            bandwidthEstimate === hlsDefaultConfig.abrEwmaDefaultEstimate
+          ) {
+            this.hls.bandwidthEstimate = startingBwEstimate;
+          }
+        }
         break;
       }
     }
@@ -362,7 +384,11 @@ export default class LevelController extends BasePlaylistController {
     }
 
     this.log(
-      `Switching to level ${newLevel}${
+      `Switching to level ${newLevel} (${
+        level.height ? level.height + 'p ' : ''
+      }${level.videoRange ? level.videoRange + ' ' : ''}${
+        level.codecSet ? level.codecSet + ' ' : ''
+      }@${level.bitrate})${
         pathwayId ? ' with Pathway ' + pathwayId : ''
       } from level ${lastLevelIndex}${
         lastPathwayId ? ' with Pathway ' + lastPathwayId : ''
@@ -380,6 +406,8 @@ export default class LevelController extends BasePlaylistController {
     delete levelSwitchingData._attrs;
     // @ts-ignore
     delete levelSwitchingData._urlId;
+    // @ts-ignore
+    delete levelSwitchingData._avgBitrate;
     this.hls.trigger(Events.LEVEL_SWITCHING, levelSwitchingData);
     // check if we need to load playlist for this level
     const levelDetails = level.details;
@@ -415,13 +443,14 @@ export default class LevelController extends BasePlaylistController {
 
   get startLevel() {
     // hls.startLevel takes precedence over config.startLevel
-    // if none of these values are defined, fallback on this._firstLevel (first quality level appearing in variant manifest)
+    // if none of these values are defined, fallback on firstAutoLevel (abr selection using bandwidth of first variant in playlist)
     if (this._startLevel === undefined) {
       const configStartLevel = this.hls.config.startLevel;
       if (configStartLevel !== undefined) {
         return configStartLevel;
       } else {
-        return this._firstLevel;
+        const firstAutoLevel = this.hls.firstAutoLevel;
+        return firstAutoLevel;
       }
     } else {
       return this._startLevel;
@@ -614,27 +643,6 @@ export default class LevelController extends BasePlaylistController {
       }
     });
     this._levels = levels;
-  }
-}
-
-export function addGroupId(
-  level: Level,
-  type: string,
-  id: string | undefined
-): void {
-  if (!id) {
-    return;
-  }
-  if (type === 'audio') {
-    if (!level.audioGroupIds) {
-      level.audioGroupIds = [];
-    }
-    level.audioGroupIds[level.url.length - 1] = id;
-  } else if (type === 'text') {
-    if (!level.textGroupIds) {
-      level.textGroupIds = [];
-    }
-    level.textGroupIds[level.url.length - 1] = id;
   }
 }
 

@@ -5,6 +5,7 @@ import { Events } from '../../../src/events';
 import { FragmentTracker } from '../../../src/controller/fragment-tracker';
 import { Fragment } from '../../../src/loader/fragment';
 import { PlaylistLevelType } from '../../../src/types/loader';
+import { AttrList } from '../../../src/utils/attr-list';
 import KeyLoader from '../../../src/loader/key-loader';
 import { SubtitleStreamController } from '../../../src/controller/subtitle-stream-controller';
 
@@ -18,11 +19,11 @@ const tracksMock = [
   {
     id: 0,
     details: { url: '', fragments: [] },
-    attrs: {},
+    attrs: new AttrList(),
   },
   {
     id: 1,
-    attrs: {},
+    attrs: new AttrList(),
   },
 ];
 

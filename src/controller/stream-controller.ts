@@ -1286,11 +1286,7 @@ export default class StreamController
     }
     if (audiovideo) {
       this.log(
-        `Init audiovideo buffer, container:${
-          audiovideo.container
-        }, codecs[level/parsed]=[${currentLevel.attrs.CODECS || ''}/${
-          audiovideo.codec
-        }]`
+        `Init audiovideo buffer, container:${audiovideo.container}, codecs[level/parsed]=[${currentLevel.codecs}/${audiovideo.codec}]`
       );
     }
     this.hls.trigger(Events.BUFFER_CODECS, tracks);
