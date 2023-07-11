@@ -1504,15 +1504,11 @@ export interface FragParsingUserdataData {
     samples: UserdataSample[];
 }
 
+// Warning: (ae-forgotten-export) The symbol "HdcpLevels" needs to be exported by the entry point hls.d.ts
 // Warning: (ae-missing-release-tag) "HdcpLevel" is part of the package's API, but it is missing a release tag (@alpha, @beta, @public, or @internal)
 //
 // @public (undocumented)
 export type HdcpLevel = (typeof HdcpLevels)[number];
-
-// Warning: (ae-missing-release-tag) "HdcpLevels" is part of the package's API, but it is missing a release tag (@alpha, @beta, @public, or @internal)
-//
-// @public (undocumented)
-export const HdcpLevels: readonly ["NONE", "TYPE-0", "TYPE-1", null];
 
 // @public
 class Hls implements HlsEventEmitter {
@@ -1993,6 +1989,8 @@ export class Level {
     // (undocumented)
     readonly bitrate: number;
     // (undocumented)
+    get codecs(): string;
+    // (undocumented)
     readonly codecSet: string;
     // (undocumented)
     details?: LevelDetails;
@@ -2034,6 +2032,10 @@ export class Level {
     set urlId(value: number);
     // (undocumented)
     readonly videoCodec: string | undefined;
+    // Warning: (ae-forgotten-export) The symbol "VideoRange" needs to be exported by the entry point hls.d.ts
+    //
+    // (undocumented)
+    get videoRange(): VideoRange;
     // (undocumented)
     readonly width: number;
 }
@@ -2059,7 +2061,7 @@ export interface LevelAttributes extends AttrList {
     // (undocumented)
     'SUPPLEMENTAL-CODECS'?: string;
     // (undocumented)
-    'VIDEO-RANGE'?: 'SDR' | 'HLG' | 'PQ';
+    'VIDEO-RANGE'?: VideoRange;
     // (undocumented)
     AUDIO?: string;
     // (undocumented)

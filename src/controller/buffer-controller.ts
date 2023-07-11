@@ -139,6 +139,11 @@ export default class BufferController implements ComponentAPI {
       video: [],
       audiovideo: [],
     };
+    this.appendErrors = {
+      audio: 0,
+      video: 0,
+      audiovideo: 0,
+    };
     this.lastMpegAudioChunk = null;
   }
 
@@ -406,6 +411,12 @@ export default class BufferController implements ComponentAPI {
           timeRanges[type] = BufferHelper.getBuffered(sourceBuffer[type]);
         }
         this.appendErrors[type] = 0;
+        if (type === 'audio' || type === 'video') {
+          this.appendErrors.audiovideo = 0;
+        } else {
+          this.appendErrors.audio = 0;
+          this.appendErrors.video = 0;
+        }
         this.hls.trigger(Events.BUFFER_APPENDED, {
           type,
           frag,
@@ -443,7 +454,7 @@ export default class BufferController implements ComponentAPI {
           this.warn(
             `Failed ${appendErrorCount}/${hls.config.appendErrorMaxRetry} times to append segment in "${type}" sourceBuffer`
           );
-          if (appendErrorCount > hls.config.appendErrorMaxRetry) {
+          if (appendErrorCount >= hls.config.appendErrorMaxRetry) {
             event.fatal = true;
           }
         }

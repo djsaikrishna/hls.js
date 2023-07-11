@@ -7,11 +7,11 @@ import {
   ManifestParsedData,
   LevelLoadedData,
   TrackSwitchedData,
-  FragLoadedData,
   ErrorData,
   LevelSwitchingData,
   LevelsUpdatedData,
   ManifestLoadingData,
+  FragBufferedData,
 } from '../types/events';
 import { Level, addGroupId, isVideoRange } from '../types/level';
 import { Events } from '../events';
@@ -58,7 +58,7 @@ export default class LevelController extends BasePlaylistController {
     hls.on(Events.LEVEL_LOADED, this.onLevelLoaded, this);
     hls.on(Events.LEVELS_UPDATED, this.onLevelsUpdated, this);
     hls.on(Events.AUDIO_TRACK_SWITCHED, this.onAudioTrackSwitched, this);
-    hls.on(Events.FRAG_LOADED, this.onFragLoaded, this);
+    hls.on(Events.FRAG_BUFFERED, this.onFragBuffered, this);
     hls.on(Events.ERROR, this.onError, this);
   }
 
@@ -69,7 +69,7 @@ export default class LevelController extends BasePlaylistController {
     hls.off(Events.LEVEL_LOADED, this.onLevelLoaded, this);
     hls.off(Events.LEVELS_UPDATED, this.onLevelsUpdated, this);
     hls.off(Events.AUDIO_TRACK_SWITCHED, this.onAudioTrackSwitched, this);
-    hls.off(Events.FRAG_LOADED, this.onFragLoaded, this);
+    hls.off(Events.FRAG_BUFFERED, this.onFragBuffered, this);
     hls.off(Events.ERROR, this.onError, this);
   }
 
@@ -475,10 +475,20 @@ export default class LevelController extends BasePlaylistController {
   }
 
   // reset errors on the successful load of a fragment
-  protected onFragLoaded(event: Events.FRAG_LOADED, { frag }: FragLoadedData) {
+  protected onFragBuffered(
+    event: Events.FRAG_BUFFERED,
+    { frag }: FragBufferedData
+  ) {
     if (frag !== undefined && frag.type === PlaylistLevelType.MAIN) {
+      const el = frag.elementaryStreams;
+      if (!Object.keys(el).some((type) => !!el[type])) {
+        return;
+      }
       const level = this._levels[frag.level];
-      if (level !== undefined) {
+      if (level?.loadError) {
+        this.log(
+          `Resetting level error count of ${level.loadError} on frag buffered`
+        );
         level.loadError = 0;
       }
     }

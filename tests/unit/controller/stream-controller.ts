@@ -470,6 +470,12 @@ describe('StreamController', function () {
       firstFrag.start = 0;
       firstFrag.sn = 1;
       firstFrag.cc = 0;
+      firstFrag.elementaryStreams.video = {
+        startDTS: 0,
+        startPTS: 0,
+        endDTS: 5,
+        endPTS: 5,
+      };
       // @ts-ignore
       const seekStub = sandbox.stub(streamController, 'seekToStartPos');
       streamController['loadedmetadata'] = false;
