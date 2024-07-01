@@ -86,6 +86,7 @@ abstract class BaseVideoParser {
   protected parseNALu(
     track: DemuxedVideoTrack,
     array: Uint8Array,
+    endOfSegment: boolean,
   ): Array<{
     data: Uint8Array;
     type: number;

@@ -1,11 +1,15 @@
 import { DecrypterAesMode } from './decrypter-aes-mode';
 
 export default class FastAESKey {
-  private subtle: any;
+  private subtle: SubtleCrypto;
   private key: ArrayBuffer;
   private aesMode: DecrypterAesMode;
 
-  constructor(subtle, key, aesMode: DecrypterAesMode) {
+  constructor(
+    subtle: SubtleCrypto,
+    key: ArrayBuffer,
+    aesMode: DecrypterAesMode,
+  ) {
     this.subtle = subtle;
     this.key = key;
     this.aesMode = aesMode;

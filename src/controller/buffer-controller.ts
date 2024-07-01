@@ -6,7 +6,10 @@ import {
   getCodecCompatibleName,
   pickMostCompleteCodecName,
 } from '../utils/codecs';
-import { getMediaSource } from '../utils/mediasource-helper';
+import {
+  getMediaSource,
+  isManagedMediaSource,
+} from '../utils/mediasource-helper';
 import {
   ElementaryStreamTypes,
   type Part,
@@ -101,10 +104,10 @@ export default class BufferController extends Logger implements ComponentAPI {
     super('buffer-controller', hls.logger);
     this.hls = hls;
     this.fragmentTracker = fragmentTracker;
-    this.appendSource =
-      hls.config.preferManagedMediaSource &&
-      typeof self !== 'undefined' &&
-      (self as any).ManagedMediaSource;
+    this.appendSource = isManagedMediaSource(
+      getMediaSource(hls.config.preferManagedMediaSource),
+    );
+
     this._initSourceBuffer();
     this.registerListeners();
   }
@@ -144,6 +147,7 @@ export default class BufferController extends Logger implements ComponentAPI {
     hls.on(Events.LEVEL_UPDATED, this.onLevelUpdated, this);
     hls.on(Events.FRAG_PARSED, this.onFragParsed, this);
     hls.on(Events.FRAG_CHANGED, this.onFragChanged, this);
+    hls.on(Events.ERROR, this.onError, this);
   }
 
   protected unregisterListeners() {
@@ -160,6 +164,7 @@ export default class BufferController extends Logger implements ComponentAPI {
     hls.off(Events.LEVEL_UPDATED, this.onLevelUpdated, this);
     hls.off(Events.FRAG_PARSED, this.onFragParsed, this);
     hls.off(Events.FRAG_CHANGED, this.onFragChanged, this);
+    hls.off(Events.ERROR, this.onError, this);
   }
 
   private _initSourceBuffer() {
@@ -170,11 +175,7 @@ export default class BufferController extends Logger implements ComponentAPI {
       video: [],
       audiovideo: [],
     };
-    this.appendErrors = {
-      audio: 0,
-      video: 0,
-      audiovideo: 0,
-    };
+    this.resetAppendErrors();
     this.lastMpegAudioChunk = null;
     this.blockedAudioAppend = null;
     this.lastVideoAppendEnd = 0;
@@ -207,6 +208,7 @@ export default class BufferController extends Logger implements ComponentAPI {
   ) {
     const media = (this.media = data.media);
     const MediaSource = getMediaSource(this.appendSource);
+
     if (media && MediaSource) {
       const ms = (this.mediaSource = new MediaSource());
       this.log(`created media source: ${ms.constructor?.name}`);
@@ -789,6 +791,23 @@ export default class BufferController extends Logger implements ComponentAPI {
     }
   }
 
+  private onError(event: Events.ERROR, data: ErrorData) {
+    if (data.details === ErrorDetails.BUFFER_APPEND_ERROR && data.frag) {
+      const nextAutoLevel = data.errorAction?.nextAutoLevel;
+      if (Number.isFinite(nextAutoLevel) && nextAutoLevel !== data.frag.level) {
+        this.resetAppendErrors();
+      }
+    }
+  }
+
+  private resetAppendErrors() {
+    this.appendErrors = {
+      audio: 0,
+      video: 0,
+      audiovideo: 0,
+    };
+  }
+
   trimBuffers() {
     const { hls, details, media } = this;
     if (!media || details === null) {
@@ -1056,8 +1075,11 @@ export default class BufferController extends Logger implements ComponentAPI {
             `source buffer exists for track ${trackName}, however track does not`,
           );
         }
-        // use levelCodec as first priority
-        let codec = track.levelCodec || track.codec;
+        // use levelCodec as first priority unless it contains multiple comma-separated codec values
+        let codec =
+          track.levelCodec?.indexOf(',') === -1
+            ? track.levelCodec
+            : track.codec;
         if (codec) {
           if (trackName.slice(0, 5) === 'audio') {
             codec = getCodecCompatibleName(codec, this.appendSource);

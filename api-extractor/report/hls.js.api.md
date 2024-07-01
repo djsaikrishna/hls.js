@@ -85,7 +85,7 @@ export type ABRControllerConfig = {
 //
 // @public (undocumented)
 export class AttrList {
-    constructor(attrs: string | Record<string, any>);
+    constructor(attrs: string | Record<string, any>, parsed?: Pick<ParsedMultivariantPlaylist | LevelDetails, 'variableList' | 'hasVariableRefs' | 'playlistParsingError'>);
     // (undocumented)
     [key: string]: any;
     // (undocumented)
@@ -104,13 +104,19 @@ export class AttrList {
     // (undocumented)
     enumeratedString(attrName: string): string | undefined;
     // (undocumented)
+    enumeratedStringList<T extends {
+        [key: string]: boolean;
+    }>(attrName: string, dict: T): {
+        [key in keyof T]: boolean;
+    };
+    // (undocumented)
     hexadecimalInteger(attrName: string): Uint8Array | null;
     // (undocumented)
     hexadecimalIntegerAsNumber(attrName: string): number;
     // (undocumented)
     optionalFloat(attrName: string, defaultValue: number): number;
     // (undocumented)
-    static parseAttrList(input: string): Record<string, any>;
+    static parseAttrList(input: string, parsed?: Pick<ParsedMultivariantPlaylist | LevelDetails, 'variableList' | 'hasVariableRefs' | 'playlistParsingError'>): Record<string, string>;
 }
 
 // Warning: (ae-missing-release-tag) "AudioPlaylistType" is part of the package's API, but it is missing a release tag (@alpha, @beta, @public, or @internal)
@@ -347,23 +353,21 @@ export class BaseStreamController extends TaskLoop implements NetworkComponentAP
     // (undocumented)
     protected fragmentTracker: FragmentTracker;
     // (undocumented)
-    protected fragPrevious: Fragment | null;
+    protected fragPrevious: MediaFragment | null;
     // (undocumented)
     protected getAppendedFrag(position: number, playlistType?: PlaylistLevelType): Fragment | null;
     // (undocumented)
     protected getCurrentContext(chunkMeta: ChunkMetadata): {
-        frag: Fragment;
+        frag: MediaFragment;
         part: Part | null;
         level: Level;
     } | null;
     // (undocumented)
-    protected getFragmentAtPosition(bufferEnd: number, end: number, levelDetails: LevelDetails): Fragment | null;
+    protected getFragmentAtPosition(bufferEnd: number, end: number, levelDetails: LevelDetails): MediaFragment | null;
     // (undocumented)
     protected getFwdBufferInfo(bufferable: Bufferable | null, type: PlaylistLevelType): BufferInfo | null;
     // (undocumented)
-    protected getFwdBufferInfoAtPos(bufferable: Bufferable | null, pos: number, type: PlaylistLevelType): BufferInfo | null;
-    // (undocumented)
-    protected getInitialLiveFragment(levelDetails: LevelDetails, fragments: Array<Fragment>): Fragment | null;
+    protected getInitialLiveFragment(levelDetails: LevelDetails, fragments: MediaFragment[]): MediaFragment | null;
     // (undocumented)
     protected getLevelDetails(): LevelDetails | undefined;
     // (undocumented)
@@ -447,7 +451,7 @@ export class BaseStreamController extends TaskLoop implements NetworkComponentAP
     // (undocumented)
     protected reduceLengthAndFlushBuffer(data: ErrorData): boolean;
     // (undocumented)
-    protected reduceMaxBufferLength(threshold: number): boolean;
+    protected reduceMaxBufferLength(threshold: number, fragDuration: number): boolean;
     // (undocumented)
     protected registerListeners(): void;
     // (undocumented)
@@ -792,6 +796,11 @@ export class ContentSteeringController extends Logger implements NetworkComponen
     // (undocumented)
     filterParsedLevels(levels: Level[]): Level[];
     // (undocumented)
+    get pathwayPriority(): string[] | null;
+    set pathwayPriority(pathwayPriority: string[]);
+    // (undocumented)
+    pathways(): string[];
+    // (undocumented)
     removeLevel(levelToRemove: Level): void;
     // (undocumented)
     startLoad(): void;
@@ -833,11 +842,13 @@ export interface CuesParsedData {
 //
 // @public (undocumented)
 export class DateRange {
-    constructor(dateRangeAttr: AttrList, dateRangeWithSameId?: DateRange);
+    constructor(dateRangeAttr: AttrList, dateRangeWithSameId?: DateRange | undefined, tagCount?: number);
     // (undocumented)
     attr: AttrList;
     // (undocumented)
     get class(): string;
+    // (undocumented)
+    get cue(): DateRangeCue;
     // (undocumented)
     get duration(): number | null;
     // (undocumented)
@@ -847,12 +858,29 @@ export class DateRange {
     // (undocumented)
     get id(): string;
     // (undocumented)
+    get isInterstitial(): boolean;
+    // (undocumented)
     get isValid(): boolean;
     // (undocumented)
     get plannedDuration(): number | null;
     // (undocumented)
     get startDate(): Date;
+    // (undocumented)
+    get startTime(): number;
+    // (undocumented)
+    tagAnchor: Fragment | null;
+    // (undocumented)
+    tagOrder: number;
 }
+
+// Warning: (ae-missing-release-tag) "DateRangeCue" is part of the package's API, but it is missing a release tag (@alpha, @beta, @public, or @internal)
+//
+// @public (undocumented)
+export type DateRangeCue = {
+    pre: boolean;
+    post: boolean;
+    once: boolean;
+};
 
 // Warning: (ae-missing-release-tag) "DRMSystemOptions" is part of the package's API, but it is missing a release tag (@alpha, @beta, @public, or @internal)
 //
@@ -1399,7 +1427,7 @@ export class Fragment extends BaseSegment {
     // (undocumented)
     get end(): number;
     // (undocumented)
-    endDTS: number;
+    endDTS?: number;
     // (undocumented)
     endList?: boolean;
     // (undocumented)
@@ -1439,7 +1467,7 @@ export class Fragment extends BaseSegment {
     // (undocumented)
     start: number;
     // (undocumented)
-    startDTS: number;
+    startDTS?: number;
     // (undocumented)
     startPTS?: number;
     // (undocumented)
@@ -1626,6 +1654,8 @@ class Hls implements HlsEventEmitter {
     on<E extends keyof HlsListeners, Context = undefined>(event: E, listener: HlsListeners[E], context?: Context): void;
     // (undocumented)
     once<E extends keyof HlsListeners, Context = undefined>(event: E, listener: HlsListeners[E], context?: Context): void;
+    get pathwayPriority(): string[] | null;
+    set pathwayPriority(pathwayPriority: string[]);
     pauseBuffering(): void;
     get playingDate(): Date | null;
     recoverMediaError(): void;
@@ -1650,6 +1680,7 @@ class Hls implements HlsEventEmitter {
     get subtitleTracks(): Array<MediaPlaylist>;
     swapAudioCodec(): void;
     get targetLatency(): number | null;
+    set targetLatency(latency: number);
     // (undocumented)
     trigger<E extends keyof HlsListeners>(event: E, eventObject: Parameters<HlsListeners[E]>[1]): boolean;
     get ttfbEstimate(): number;
@@ -1942,9 +1973,9 @@ export interface ILogger {
 // @public (undocumented)
 export interface InitPTSFoundData {
     // (undocumented)
-    frag: Fragment;
+    frag: MediaFragment;
     // (undocumented)
-    id: string;
+    id: PlaylistLevelType;
     // (undocumented)
     initPTS: number;
     // (undocumented)
@@ -2008,6 +2039,7 @@ export type LatencyControllerConfig = {
     liveSyncDuration?: number;
     liveMaxLatencyDuration?: number;
     maxLiveSyncPlaybackRate: number;
+    liveSyncOnStallIncrease: number;
 };
 
 // Warning: (ae-missing-release-tag) "Level" is part of the package's API, but it is missing a release tag (@alpha, @beta, @public, or @internal)
@@ -2170,6 +2202,8 @@ export class LevelDetails {
     // (undocumented)
     dateRanges: Record<string, DateRange>;
     // (undocumented)
+    dateRangeTagCount: number;
+    // (undocumented)
     deltaUpdateFailed?: boolean;
     // (undocumented)
     get drift(): number;
@@ -2192,9 +2226,9 @@ export class LevelDetails {
     // (undocumented)
     get fragmentEnd(): number;
     // (undocumented)
-    fragmentHint?: Fragment;
+    fragmentHint?: MediaFragment;
     // (undocumented)
-    fragments: Fragment[];
+    fragments: MediaFragment[];
     // (undocumented)
     get hasProgramDateTime(): boolean;
     // (undocumented)
@@ -2802,6 +2836,14 @@ export interface MediaEndedData {
     stalled: boolean;
 }
 
+// Warning: (ae-missing-release-tag) "MediaFragment" is part of the package's API, but it is missing a release tag (@alpha, @beta, @public, or @internal)
+//
+// @public (undocumented)
+export interface MediaFragment extends Fragment {
+    // (undocumented)
+    sn: number;
+}
+
 // Warning: (ae-missing-release-tag) "MediaKeyFunc" is part of the package's API, but it is missing a release tag (@alpha, @beta, @public, or @internal)
 //
 // @public (undocumented)
@@ -2989,17 +3031,31 @@ export interface NonNativeTextTracksData {
     tracks: Array<NonNativeTextTrack>;
 }
 
+// Warning: (ae-missing-release-tag) "ParsedMultivariantPlaylist" is part of the package's API, but it is missing a release tag (@alpha, @beta, @public, or @internal)
+//
+// @public (undocumented)
+export type ParsedMultivariantPlaylist = {
+    contentSteering: ContentSteeringOptions | null;
+    levels: LevelParsed[];
+    playlistParsingError: Error | null;
+    sessionData: Record<string, AttrList> | null;
+    sessionKeys: LevelKey[] | null;
+    startTimeOffset: number | null;
+    variableList: VariableMap | null;
+    hasVariableRefs: boolean;
+};
+
 // Warning: (ae-missing-release-tag) "Part" is part of the package's API, but it is missing a release tag (@alpha, @beta, @public, or @internal)
 //
 // @public
 export class Part extends BaseSegment {
-    constructor(partAttrs: AttrList, frag: Fragment, baseurl: string, index: number, previous?: Part);
+    constructor(partAttrs: AttrList, frag: MediaFragment, baseurl: string, index: number, previous?: Part);
     // (undocumented)
     readonly duration: number;
     // (undocumented)
     get end(): number;
     // (undocumented)
-    readonly fragment: Fragment;
+    readonly fragment: MediaFragment;
     // (undocumented)
     readonly fragOffset: number;
     // (undocumented)
@@ -3439,6 +3495,7 @@ export type VariableMap = Record<string, string>;
 export type VideoSelectionOption = {
     preferHDR?: boolean;
     allowedVideoRanges?: Array<VideoRange>;
+    videoCodec?: string;
 };
 
 // (No @packageDocumentation comment for this package)

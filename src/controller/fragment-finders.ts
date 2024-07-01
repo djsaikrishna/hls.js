@@ -1,5 +1,6 @@
 import BinarySearch from '../utils/binary-search';
-import { Fragment } from '../loader/fragment';
+import type { Fragment, MediaFragment } from '../loader/fragment';
+import type { LevelDetails } from '../loader/level-details';
 
 /**
  * Returns first fragment whose endPdt value exceeds the given PDT, or null.
@@ -8,10 +9,10 @@ import { Fragment } from '../loader/fragment';
  * @param maxFragLookUpTolerance - The amount of time that a fragment's start/end can be within in order to be considered contiguous
  */
 export function findFragmentByPDT(
-  fragments: Array<Fragment>,
+  fragments: MediaFragment[],
   PDTValue: number | null,
   maxFragLookUpTolerance: number,
-): Fragment | null {
+): MediaFragment | null {
   if (
     PDTValue === null ||
     !Array.isArray(fragments) ||
@@ -54,21 +55,26 @@ export function findFragmentByPDT(
  * @returns a matching fragment or null
  */
 export function findFragmentByPTS(
-  fragPrevious: Fragment | null,
-  fragments: Array<Fragment>,
+  fragPrevious: MediaFragment | null,
+  fragments: MediaFragment[],
   bufferEnd: number = 0,
   maxFragLookUpTolerance: number = 0,
-): Fragment | null {
-  let fragNext: Fragment | null = null;
+  nextFragLookupTolerance: number = 0.005,
+): MediaFragment | null {
+  let fragNext: MediaFragment | null = null;
   if (fragPrevious) {
-    fragNext =
-      fragments[
-        (fragPrevious.sn as number) - (fragments[0].sn as number) + 1
-      ] || null;
+    fragNext = fragments[1 + fragPrevious.sn - fragments[0].sn] || null;
     // check for buffer-end rounding error
-    const bufferEdgeError = fragPrevious.endDTS - bufferEnd;
+    const bufferEdgeError = (fragPrevious.endDTS as number) - bufferEnd;
     if (bufferEdgeError > 0 && bufferEdgeError < 0.0000015) {
       bufferEnd += 0.0000015;
+    }
+    if (
+      fragNext &&
+      fragPrevious.level !== fragNext.level &&
+      fragNext.end <= fragPrevious.end
+    ) {
+      fragNext = fragments[2 + fragPrevious.sn - fragments[0].sn] || null;
     }
   } else if (bufferEnd === 0 && fragments[0].start === 0) {
     fragNext = fragments[0];
@@ -76,9 +82,17 @@ export function findFragmentByPTS(
   // Prefer the next fragment if it's within tolerance
   if (
     fragNext &&
-    (!fragPrevious || fragPrevious.level === fragNext.level) &&
-    fragmentWithinToleranceTest(bufferEnd, maxFragLookUpTolerance, fragNext) ===
-      0
+    (((!fragPrevious || fragPrevious.level === fragNext.level) &&
+      fragmentWithinToleranceTest(
+        bufferEnd,
+        maxFragLookUpTolerance,
+        fragNext,
+      ) === 0) ||
+      fragmentWithinFastStartSwitch(
+        fragNext,
+        fragPrevious,
+        Math.min(nextFragLookupTolerance, maxFragLookUpTolerance),
+      ))
   ) {
     return fragNext;
   }
@@ -94,6 +108,28 @@ export function findFragmentByPTS(
   return fragNext;
 }
 
+function fragmentWithinFastStartSwitch(
+  fragNext: Fragment,
+  fragPrevious: Fragment | null,
+  nextFragLookupTolerance: number,
+): boolean {
+  if (
+    fragPrevious &&
+    fragPrevious.start === 0 &&
+    fragPrevious.level < fragNext.level &&
+    (fragPrevious.endPTS || 0) > 0
+  ) {
+    const firstDuration = fragPrevious.tagList.reduce((duration, tag) => {
+      if (tag[0] === 'INF') {
+        duration += parseFloat(tag[1]);
+      }
+      return duration;
+    }, nextFragLookupTolerance);
+    return fragNext.start <= firstDuration;
+  }
+  return false;
+}
+
 /**
  * The test function used by the findFragmentBySn's BinarySearch to look for the best match to the current buffer conditions.
  * @param candidate - The fragment to test
@@ -104,7 +140,7 @@ export function findFragmentByPTS(
 export function fragmentWithinToleranceTest(
   bufferEnd = 0,
   maxFragLookUpTolerance = 0,
-  candidate: Fragment,
+  candidate: MediaFragment,
 ) {
   // eagerly accept an accurate match (no tolerance)
   if (
@@ -158,7 +194,7 @@ export function fragmentWithinToleranceTest(
 export function pdtWithinToleranceTest(
   pdtBufferEnd: number,
   maxFragLookUpTolerance: number,
-  candidate: Fragment,
+  candidate: MediaFragment,
 ): boolean {
   const candidateLookupTolerance =
     Math.min(
@@ -172,9 +208,9 @@ export function pdtWithinToleranceTest(
 }
 
 export function findFragWithCC(
-  fragments: Fragment[],
+  fragments: MediaFragment[],
   cc: number,
-): Fragment | null {
+): MediaFragment | null {
   return BinarySearch.search(fragments, (candidate) => {
     if (candidate.cc < cc) {
       return 1;
@@ -184,4 +220,27 @@ export function findFragWithCC(
       return 0;
     }
   });
+}
+
+export function findNearestWithCC(
+  details: LevelDetails | undefined,
+  cc: number,
+  fragment: MediaFragment,
+): MediaFragment | null {
+  if (details) {
+    if (details.startCC <= cc && details.endCC >= cc) {
+      const start = fragment.start;
+      const end = fragment.end;
+      return BinarySearch.search(details.fragments, (candidate) => {
+        if (candidate.cc < cc || candidate.end <= start) {
+          return 1;
+        } else if (candidate.cc > cc || candidate.start >= end) {
+          return -1;
+        } else {
+          return 0;
+        }
+      });
+    }
+  }
+  return null;
 }
